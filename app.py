@@ -1,11 +1,11 @@
 import os
 import json
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import psycopg2
 import psycopg2.extras
 
-# 1. Configuração do Flask
-app = Flask(__name__)
+# 1. Configurações Iniciais
+app = Flask(__name__, template_folder='templates', static_folder='static')
 
 # 2. Configuração da Conexão com o Banco de Dados
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -14,18 +14,20 @@ print(f"DEBUG: Lendo DATABASE_URL: {'Definida' if DATABASE_URL else 'Nao definid
 if not DATABASE_URL:
     raise Exception("A variável de ambiente 'DATABASE_URL' não foi definida.")
 
+# 3. Funções de Banco de Dados
+
 def get_db_connection():
     """Cria e retorna uma nova conexão com o banco de dados."""
     try:
         conn = psycopg2.connect(DATABASE_URL)
         return conn
     except psycopg2.OperationalError as e:
-        print(f"Erro ao conectar ao banco de dados: {e}")
+        print(f"Erro fatal ao conectar ao banco de dados: {e}")
         raise
 
 def inicializar_banco():
     """Cria as tabelas iniciais do banco de dados se elas não existirem."""
-    print("DEBUG DB: Tentando inicializar o banco de dados...")
+    print("DEBUG DB: Verificando e inicializando o banco de dados...")
     conn = None
     try:
         conn = get_db_connection()
@@ -67,40 +69,77 @@ def inicializar_banco():
         print("DEBUG DB: Tabelas verificadas/criadas com sucesso.")
     except psycopg2.Error as e:
         print(f"Erro na inicialização do banco de dados: {e}")
+        raise  # Lança a exceção para interromper a execução se o DB falhar
     finally:
         if conn is not None:
             conn.close()
 
-# 3. Endpoints da API
+# 4. Endpoints da API (JSON)
 
 @app.route('/api/status', methods=['GET'])
-def status():
+def api_status():
     """Verifica o status da API."""
     return jsonify({"status": "API is running"})
 
 @app.route('/api/produtos', methods=['GET'])
 def get_produtos():
     """Retorna uma lista de produtos (atualmente vazia)."""
-    # Em uma implementação futura, buscaria os produtos do banco de dados.
     return jsonify([])
 
 @app.route('/api/produtos', methods=['POST'])
 def add_produto():
-    """Recebe um novo produto e loga os dados."""
+    """Recebe um novo produto, loga e retorna uma mensagem."""
     produto_data = request.json
-    print(f"DEBUG: Produto recebido via POST: {json.dumps(produto_data, indent=2)}")
-    # A lógica para salvar no banco de dados seria implementada aqui.
+    print(f"DEBUG: Produto recebido via API: {json.dumps(produto_data, indent=2)}")
     return jsonify({"message": "Produto recebido (ainda nao salvo)"}), 201
 
-# 4. Bloco de Execução Principal
+@app.route('/api/farmacias', methods=['GET'])
+def get_farmacias():
+    """Retorna uma lista de farmácias (atualmente vazia)."""
+    return jsonify([])
+
+@app.route('/api/farmacias', methods=['POST'])
+def add_farmacia():
+    """Recebe uma nova farmácia, loga e retorna uma mensagem."""
+    farmacia_data = request.json
+    print(f"DEBUG: Farmácia recebida via API: {json.dumps(farmacia_data, indent=2)}")
+    return jsonify({"message": "Farmacia recebida (ainda nao salva)"}), 201
+
+# 5. Endpoints para Páginas Web (HTML)
+
+@app.route('/', methods=['GET'])
+def index():
+    """Renderiza a página inicial."""
+    return render_template('index.html', title="Bem-vindo ao ERP Farmácia")
+
+@app.route('/dashboard', methods=['GET'])
+def dashboard():
+    """Renderiza o painel principal."""
+    return render_template('dashboard.html', title="Dashboard da Farmácia")
+
+@app.route('/pdv', methods=['GET'])
+def pdv():
+    """Renderiza o painel de venda rápida."""
+    return render_template('pdv.html', title="Painel de Venda Rápida")
+
+# 6. Bloco de Execução Principal
 if __name__ == '__main__':
-    # Inicializa o banco de dados na inicialização do aplicativo
-    inicializar_banco()
+    try:
+        # Inicializa o banco de dados na inicialização do aplicativo
+        inicializar_banco()
 
-    # Obtém a porta do ambiente ou usa 5000 como padrão
-    port = int(os.environ.get('PORT', 5000))
-    print(f"DEBUG: Lendo PORT: {port}")
+        port = int(os.environ.get('PORT', 5000))
+        print(f"DEBUG: Lendo PORT: {port}")
 
-    # Inicia o servidor Flask
-    print(f"Iniciando servidor Flask na porta {port}...")
-    app.run(host='0.0.0.0', port=port, debug=True)
+        # Define o modo debug com base em uma variável de ambiente
+        is_debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+        print(f"DEBUG: Modo debug: {is_debug}")
+
+        # Inicia o servidor Flask
+        print(f"Iniciando servidor Flask em http://0.0.0.0:{port}")
+        app.run(host='0.0.0.0', port=port, debug=is_debug)
+
+    except Exception as e:
+        print(f"Erro fatal ao iniciar a aplicação: {e}")
+        # Em um ambiente de produção, isso seria logado em um sistema de monitoramento
+        os._exit(1)  # Sai com código de erro
